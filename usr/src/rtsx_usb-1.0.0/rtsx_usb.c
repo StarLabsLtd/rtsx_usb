@@ -286,6 +286,7 @@ static int rtsx_usb_get_status_with_bulk(struct rtsx_ucr *ucr, u16 *status)
 int rtsx_usb_get_card_status(struct rtsx_ucr *ucr, u16 *status)
 {
 	int ret;
+	u8 interrupt_val = 0;
 	u16 *buf;
 
 	if (!status)
@@ -311,6 +312,25 @@ int rtsx_usb_get_card_status(struct rtsx_ucr *ucr, u16 *status)
 	/* usb_control_msg may return positive when success */
 	if (ret < 0)
 		return ret;
+
+	ret = rtsx_usb_read_register(ucr, CARD_INT_PEND, &interrupt_val);
+	if (ret < 0)
+		return ret;
+
+	/* Cross check presence with interrupts */
+	if (*status & XD_CD)
+		if (!(interrupt_val & XD_INT))
+			*status &= ~XD_CD;
+
+	if (*status & SD_CD)
+		if (!(interrupt_val & SD_INT))
+			*status &= ~SD_CD;
+
+	if (*status & MS_CD)
+		if (!(interrupt_val & MS_INT))
+			*status &= ~MS_CD;
+
+	rtsx_usb_write_register(ucr, CARD_INT_PEND, (XD_INT | SD_INT | MS_INT), interrupt_val);
 
 	return 0;
 }
@@ -620,6 +640,7 @@ static int rtsx_usb_probe(struct usb_interface *intf,
 	struct usb_device *usb_dev = interface_to_usbdev(intf);
 	struct rtsx_ucr *ucr;
 	int ret;
+	u8 interrupts;
 
 	dev_dbg(&intf->dev,
 		": Realtek USB Card Reader found at bus %03d address %03d\n",
@@ -654,6 +675,16 @@ static int rtsx_usb_probe(struct usb_interface *intf,
 	ret = rtsx_usb_init_chip(ucr);
 	if (ret)
 		goto out_init_fail;
+
+	ret = rtsx_usb_read_register(ucr, CARD_INT_PEND, &interrupts);
+	if (ret < 0)
+		return ret;
+
+	rtsx_usb_write_register(ucr, CARD_INT_PEND, (XD_INT | SD_INT | MS_INT), interrupts);
+	ret = rtsx_usb_write_register(ucr, CARD_INT_EN, (XD_INT | SD_INT | MS_INT),
+							(XD_INT | SD_INT | MS_INT));
+	if (ret < 0)
+		return ret;
 
 	/* initialize USB SG transfer timer */
 	timer_setup(&ucr->sg_timer, rtsx_usb_sg_timed_out, 0);
