@@ -1,0 +1,13 @@
+Source: rtsx-usb
+Section: kernel
+Priority: optional
+Maintainer: Star Labs <admin@starlabs.systems>
+Build-Depends: debhelper-compat (= 13), dh-sequence-dkms
+Rules-Requires-Root: no
+Standards-Version: 4.6.0
+
+Package: rtsx-usb-dkms
+Architecture: all
+Depends: ${misc:Depends}, dkms
+Provides: rtsx-usb
+Description: Advanced Realtek Card Reader driver
