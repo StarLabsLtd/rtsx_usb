@@ -7,6 +7,7 @@
  *   Roger Tseng <rogerable@realtek.com>
  */
 #include <linux/module.h>
+#include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/usb.h>
@@ -614,6 +615,23 @@ static int rtsx_usb_init_chip(struct rtsx_ucr *ucr)
 	return rtsx_usb_reset_chip(ucr);
 }
 
+static void rtsx_usb_cd_work(struct work_struct *work)
+{
+	struct rtsx_ucr *ucr = container_of(to_delayed_work(work),
+					    struct rtsx_ucr, cd_work);
+	u16 status;
+	int err;
+
+	mutex_lock(&ucr->dev_mutex);
+	err = rtsx_usb_get_card_status(ucr, &status);
+	mutex_unlock(&ucr->dev_mutex);
+
+	// TODO: actually do something
+
+	// Re-schedule the work
+	schedule_delayed_work(&ucr->cd_work, msecs_to_jiffies(500));
+}
+
 static int rtsx_usb_probe(struct usb_interface *intf,
 			 const struct usb_device_id *id)
 {
@@ -663,6 +681,9 @@ static int rtsx_usb_probe(struct usb_interface *intf,
 	if (ret)
 		goto out_init_fail;
 
+	INIT_DELAYED_WORK(&ucr->cd_work, rtsx_usb_cd_work);
+	schedule_delayed_work(&ucr->cd_work, msecs_to_jiffies(500));
+
 #ifdef CONFIG_PM
 	intf->needs_remote_wakeup = 1;
 	usb_enable_autosuspend(usb_dev);
@@ -675,6 +696,7 @@ out_init_fail:
 	kfree(ucr->rsp_buf);
 	ucr->rsp_buf = NULL;
 out_free_cmd_buf:
+	cancel_delayed_work_sync(&ucr->cd_work);
 	kfree(ucr->cmd_buf);
 	ucr->cmd_buf = NULL;
 	return ret;

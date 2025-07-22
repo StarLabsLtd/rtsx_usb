@@ -61,6 +61,8 @@ struct rtsx_ucr {
 
 	struct timer_list	sg_timer;
 	struct mutex		dev_mutex;
+
+	struct delayed_work	cd_work;
 };
 
 /* buffer size */
